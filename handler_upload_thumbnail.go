@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -52,7 +53,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	Thumbnail.mediaType = http.DetectContentType(Thumbnail.data)
-	fmt.Printf("File Content-Type = %s\n", Thumbnail.mediaType)
+	fmt.Printf("Content-Type = %s\n", Thumbnail.mediaType)
 
 	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
@@ -63,10 +64,15 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "You can't modify this video", err)
 		return
 	}
-	videoThumbnails[video.ID] = Thumbnail
-	thumbnailURL := fmt.Sprintf("http://localhost:%s/api/thumbnails/%s", cfg.port, video.ID.String())
+	/*
+		videoThumbnails[video.ID] = Thumbnail
+		thumbnailURL := fmt.Sprintf("http://localhost:%s/api/thumbnails/%s", cfg.port, video.ID.String())
+	*/
+	// store thumbnail as base64 encoded data URL in database record for video
+	base64Thumbnail := base64.StdEncoding.EncodeToString(Thumbnail.data)
+	thumbnailURL := fmt.Sprintf("data:%s;base64,%s", Thumbnail.mediaType, base64Thumbnail)
 	video.ThumbnailURL = &thumbnailURL
-	fmt.Printf("Video Thumbnail URL = %s\n", *video.ThumbnailURL)
+	// fmt.Printf("Video Thumbnail URL = %s\n", *video.ThumbnailURL)
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unable to update database record for video", err)

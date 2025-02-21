@@ -88,13 +88,17 @@ func (cfg *apiConfig) handlerVideoGet(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "Invalid video ID", err)
 		return
 	}
-
 	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, "Couldn't get video", err)
 		return
 	}
-
+	// generate a true presigned URL for http response
+	video, err = cfg.dbVideoToSignedVideo(video)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Unable to generate presigned URL for video", err)
+		return
+	}
 	respondWithJSON(w, http.StatusOK, video)
 }
 
@@ -109,12 +113,18 @@ func (cfg *apiConfig) handlerVideosRetrieve(w http.ResponseWriter, r *http.Reque
 		respondWithError(w, http.StatusUnauthorized, "Couldn't validate JWT", err)
 		return
 	}
-
 	videos, err := cfg.db.GetVideos(userID)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve videos", err)
 		return
 	}
-
+	// generate true presigned URLs for http response
+	for i := 0; i < len(videos); i++ {
+		videos[i], err = cfg.dbVideoToSignedVideo(videos[i])
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Unable to generate presigned URL for video", err)
+			return
+		}
+	}
 	respondWithJSON(w, http.StatusOK, videos)
 }

@@ -42,7 +42,7 @@ var ctx context.Context
 var videoThumbnails = map[uuid.UUID]thumbnail{}
 
 func processVideoForFastStart(filePath string) (string, error) {
-	fmt.Printf("Input video file: %s\n", filePath)
+	//fmt.Printf("Input video file: %s\n", filePath)
 	outPath := filePath + ".faststart"
 	args := []string{"-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", outPath}
 	cmd := exec.Command("ffmpeg", args...)
@@ -51,7 +51,7 @@ func processVideoForFastStart(filePath string) (string, error) {
 		fmt.Printf("Error executing ffmpeg command: %v", err)
 		return "", err
 	}
-	fmt.Printf("Output video file: %s\n", outPath)
+	//fmt.Printf("Output video file: %s\n", outPath)
 	return outPath, nil
 }
 

@@ -9,11 +9,38 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
+	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 	"github.com/google/uuid"
 )
+
+func generatePresignedURL(s3Client *s3.Client, bucket, key string, expireTime time.Duration) (string, error) {
+	goInput := s3.GetObjectInput{Bucket: &bucket, Key: &key}
+	psClient := s3.NewPresignClient(s3Client, s3.WithPresignExpires(expireTime))
+	psHttpRequest, err := psClient.PresignGetObject(ctx, &goInput)
+	if err != nil {
+		return "", err
+	}
+	return psHttpRequest.URL, nil
+}
+
+func (cfg *apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video, error) {
+	if video.VideoURL != nil {
+		str := strings.Split(*video.VideoURL, ",")
+		//fmt.Printf("Bucket: %s\nKey: %s\n", str[0], str[1])
+		url, err := generatePresignedURL(cfg.s3Client, str[0], str[1], time.Duration(time.Duration.Minutes(5)))
+		if err != nil {
+			fmt.Printf("Error creating presigned URL: %v", err)
+			return video, err
+		}
+		//fmt.Printf("Presigned URL: %s\n", url)
+		video.VideoURL = &url
+	}
+	return video, nil
+}
 
 func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request) {
 	// set upload limit of 1GB
@@ -109,7 +136,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	default:
 		keyStr = "other"
 	}
-	fmt.Printf("%s returned from getVideoAspectRatio\nUsing %s prefix for AWS\n", ar, keyStr)
+	//fmt.Printf("%s returned from getVideoAspectRatio\nUsing %s prefix for AWS\n", ar, keyStr)
 	_, err = fs.Seek(0, 0)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unable to seek to beginning of fast video file", err)
@@ -123,13 +150,22 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusBadRequest, "Unable to upload video file to AWS", err)
 		return
 	}
-	videoURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, keyStr)
+	//videoURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, keyStr)
+	videoURL := fmt.Sprintf("%s,%s", cfg.s3Bucket, keyStr)
 	video.VideoURL = &videoURL
-	fmt.Printf("Video URL = %s\n", *video.VideoURL)
+	//fmt.Printf("Database video URL = %s\n", *video.VideoURL)
+	// update database with 'hacked' URL
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unable to update database record for video", err)
 		return
 	}
+	// generate a true presigned URL for http response
+	video, err = cfg.dbVideoToSignedVideo(video)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Unable to generate presigned URL for video", err)
+		return
+	}
+	//fmt.Printf("HTTP Response video URL = %s\n", *video.VideoURL)
 	respondWithJSON(w, http.StatusOK, video)
 }
